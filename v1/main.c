@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+char *getcwd(char *buf, size_t size);
 
 void loop();
 char *readLine();
@@ -10,6 +13,8 @@ int strStartsWithStr(char *big, char *small);
 
 void nlCmd(int n, char **splitted);
 void uniqCmd(int n, char **splitted);
+void cdCmd(int n, char **splitted);
+void strlwr(char *p);
 
 int main() {
 	
@@ -18,24 +23,16 @@ int main() {
 	return 0;
 }
 
-
+char *crtDir;
 
 void loop() {
 	int read = 1;
-	while (read) {
-		char *str = strdup("uniq exemplu.out");
-		printf(">%s\n", str);
-		processCmd(str);
-		str = strdup("uniq exemplu.out -d");
-		printf(">%s\n", str);
-		processCmd(str);
-		str = strdup("uniq exemplu.out -i");
-		printf(">%s\n", str);
-		processCmd(str);
-		str = strdup("uniq exemplu.out -d -i");
-		printf(">%s\n", str);
-		processCmd(str);
 
+	crtDir = (char *)malloc(256*sizeof(char));
+	getcwd(crtDir, 256);
+	printf("cd: %s\n", crtDir);
+
+	while (read) {
 		char *line = readLine();
 		if (strcmp(line, "exit") == 0) {
 			read = 0;
@@ -43,6 +40,7 @@ void loop() {
 		}
 		processCmd(line);
 	}
+	free(crtDir);
 }
 
 void processCmd(char *line) {
@@ -56,6 +54,8 @@ void processCmd(char *line) {
 		nlCmd(n, splitted);
 	else if (strcmp(splitted[0], "uniq") == 0)
 		uniqCmd(n, splitted);
+	else if (strcmp(splitted[0], "cd") == 0)
+		cdCmd(n, splitted);
 	else
 		printf("Invalid command!\n");
 
@@ -97,44 +97,79 @@ int strStartsWithStr(char *big, char *small) {
 	return strstr(big, small) == big;
 }
 
-void uniqCmd(int n, char **splitted) {
-	int i, d, u;
-	i = d = u = 0;
-	FILE *in = stdin, *out = stdout;
-	char *fin, *fout;
+void cdCmd(int n, char **splitted){
+	if(n != 2){
+		printf("invalid parameters\n");
+		return;
+	}
+	if(strcmp(splitted[1], ".") == 0)
+		return;
+	else if(strcmp(splitted[1], "/") == 0){
+		crtDir[1] = '\0';
+		return;
+	}
+	else if(strcmp(splitted[1], "..") == 0){
+		if(strcmp(crtDir, "/") == 0)
+			return;
+		int len = strlen(crtDir) - 1;
+		while(crtDir[len] != '/'){
+			len --;
+		}
+		crtDir[len] = '\0';
+	}
+	else{
+		char *tmp = (char*)malloc(strlen(crtDir) + strlen(splitted[1]) + 2);
+		sprintf(tmp, "%s/%s", crtDir, splitted[1]);
+		int len = strlen(tmp) - 1;
+		while(tmp[len] == '/'){
+			tmp[len] = '\0';
+			len --;
+		}
+		free(crtDir);
+		crtDir = tmp;
+	}
+}
 
-	for (int j = 1; j < n; j++) {
+void uniqCmd(int n, char **splitted) {
+	int i, d, u, du;
+	i = d = u = du = 0;
+	FILE *in = stdin, *out = stdout;
+	int j;
+	for (j = 1; j < n; j++) {
 		if (strcmp(splitted[j], "-i") == 0) {
 			i = 1;
 		}
 		else if (strcmp(splitted[j], "-d") == 0) {
 			d = 1;
+			du = d&&u;
 		}
 		else if (strcmp(splitted[j], "-u") == 0) {
 			u = 1;
+			du = d&&u;
 		}
-		else {
+		else if(strcmp(splitted[j], ">") == 0){
+			j++;
+			if(splitted[j] == NULL){
+				printf("invalid redirection file!\n");
+				return;
+			}
+			if(!openFile(&out, splitted[j], "w"))
+				return;
+		}
+		else{
 			if (in == stdin) {
-				fin = splitted[j];
-				in = fopen(fin, "r");
+				if(!openFile(&in, splitted[j], "r"))
+					return;
 			}
-			else {
-				fout = splitted[j];
-				out = fopen(fout, "w");
-			}
+			else
+				if(!openFile(&out, splitted[j], "w"))
+					return;			
 		}
-	}
-	if (!in) {
-		printf("Fisierul '%s' nu a fost gasit!\n", fin);
-		return;
-	}
-	if (!out) {
-		printf("Fisierul '%s' nu a fost gasit!\n", fout);
-		return;
 	}
 
 	char *crtLine = (char *)malloc(256);
 	char *lastLine = (char *)malloc(256);
+	char *lastLineLwr = (char *)malloc(256);
 	char *tmp;
 	int firstLine = 1;
 	int flag = 0;
@@ -149,50 +184,59 @@ void uniqCmd(int n, char **splitted) {
 			tmp = strdup(crtLine);
 			strlwr(tmp);
 		}
-		else {
+		else 
 			tmp = crtLine;
-		}
 		
-		int neq = firstLine || strcmp(lastLine, tmp) != 0;
-		if (firstLine) firstLine = 0;
+		int neq = firstLine || strcmp(i?lastLineLwr:lastLine, tmp) != 0;
 
 		if (neq) {
-			if (d) {
+			if(u)
+			{
+				if(!flag && !du && !firstLine)
+					fprintf(out, "%s\n", lastLine);
 				flag = 0;
 			}
-			else {
-				fprintf(out, "%s\n", crtLine);
-			}
+			else if (d) 
+				flag = 0;
+			else if(!du)
+					fprintf(out, "%s\n", crtLine);			
 		}
 		else {
-			if (d) {
+			if(u)
+				flag = 1;
+			else if (d) 
 				if (!flag) {
 					flag = 1;
-					fprintf(out, "%s\n", lastLine);
+					if(!du)	
+						fprintf(out, "%s\n", lastLine);
 				}
-			}
 		}
 
-		strcpy(lastLine, tmp);
-		if (i)
+		if (firstLine) firstLine = 0;
+		strcpy(lastLine, crtLine);
+		if(i){
+			strcpy(lastLineLwr, tmp);
 			free(tmp);
-		//printf("->%s\n", lastLine);
-
+		}
 	} while (!feof(in));
-	fprintf(out, "\n");
+
 	if (in != stdin)
 		fclose(in);
 	if (out != stdout)
 		fclose(out);
+	free(crtLine);
+	free(lastLine);
+	free(lastLineLwr);
 }
 
 void nlCmd(int n, char **splitted){
 	int s, d;
 	s = d = 0;
-	char *sParam = "  ", *dParam, *fn;
+	char *sParam = "  ", *dParam;
 	FILE *f = stdin;
-
-	for (int i = 1; i < n; i++) {
+	FILE *out = stdout;
+	int i;
+	for (i = 1; i < n; i++) {
 		if (strcmp(splitted[i], "-s") == 0) {
 			s = 1;
 			sParam = splitted[i + 1];
@@ -203,16 +247,21 @@ void nlCmd(int n, char **splitted){
 			dParam = splitted[i + 1];
 			i++;
 		}
+		else if(strcmp(splitted[i], ">") == 0){
+			i++;
+			if(splitted[i] == NULL){
+				printf("invalid redirection file!\n");
+				return;
+			}
+			if(!openFile(&out, splitted[i], "w"))
+				return;
+		}
 		else {
-			fn = splitted[i];
-			f = fopen(fn, "r");
+			if(!openFile(&f, splitted[i], "r"))
+				return;
 		}
 	}
 
-	if (!f) {
-		printf("Fisierul '%s' nu a fost gasit!\n", fn);
-		return;
-	}
 	int lineIndex = 0;
 	char *crtLine = (char *)malloc(256);
 
@@ -221,8 +270,37 @@ void nlCmd(int n, char **splitted){
 		int len = strlen(crtLine);
 		if (crtLine[len - 1] == '\n')
 			crtLine[len - 1] = '\0';
-		printf("\t%d%s%s\n", lineIndex, sParam, crtLine);
+		printf("w: \t%d%s%s\n", lineIndex, sParam, crtLine);
+		fprintf(out, "\t%d%s%s\n", lineIndex, sParam, crtLine);
+		fflush(out);
 		lineIndex++;
 	} while (!feof(f));
-	
+
+	free(crtLine);
+	if(out != stdout)
+		fclose(out);
+}
+
+
+void strlwr(char *p){
+	while(*p){
+		*p = tolower(*p);
+		p++;
+	}
+}
+
+int openFile(FILE **f, char *fileName, char *mode){
+	char *tmp = fileName;
+	if(fileName[0] != '/'){
+		tmp = (char *)malloc(strlen(fileName) + strlen(crtDir) + 3);
+		sprintf(tmp, "%s/%s", crtDir, fileName);
+	}
+	printf("openning file '%s' with mode '%s'\n", tmp, mode);
+	*f = fopen(tmp, mode);
+	if(!(*f)){
+		printf("Can't open file '%s' !\n", tmp);
+	}
+	if(tmp!=fileName)
+		free(tmp);
+	return *f != NULL;
 }
