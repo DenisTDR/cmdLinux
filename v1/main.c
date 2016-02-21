@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+//#include <unistd.h>
+#include <ctype.h>
 
 char *getcwd(char *buf, size_t size);
 
@@ -14,7 +15,8 @@ int strStartsWithStr(char *big, char *small);
 void nlCmd(int n, char **splitted);
 void uniqCmd(int n, char **splitted);
 void cdCmd(int n, char **splitted);
-void strlwr(char *p);
+void strlwr2(char *p);
+int openFile(FILE **f, char *fileName, char *mode);
 
 int main() {
 	
@@ -30,7 +32,7 @@ void loop() {
 
 	crtDir = (char *)malloc(256*sizeof(char));
 	getcwd(crtDir, 256);
-	printf("cd: %s\n", crtDir);
+	//printf("cd: %s\n", crtDir);
 
 	while (read) {
 		char *line = readLine();
@@ -182,7 +184,7 @@ void uniqCmd(int n, char **splitted) {
 
 		if (i) {
 			tmp = strdup(crtLine);
-			strlwr(tmp);
+			strlwr2(tmp);
 		}
 		else 
 			tmp = crtLine;
@@ -270,7 +272,7 @@ void nlCmd(int n, char **splitted){
 		int len = strlen(crtLine);
 		if (crtLine[len - 1] == '\n')
 			crtLine[len - 1] = '\0';
-		printf("w: \t%d%s%s\n", lineIndex, sParam, crtLine);
+		//printf("w: \t%d%s%s\n", lineIndex, sParam, crtLine);
 		fprintf(out, "\t%d%s%s\n", lineIndex, sParam, crtLine);
 		fflush(out);
 		lineIndex++;
@@ -282,7 +284,7 @@ void nlCmd(int n, char **splitted){
 }
 
 
-void strlwr(char *p){
+void strlwr2(char *p){
 	while(*p){
 		*p = tolower(*p);
 		p++;
@@ -295,7 +297,7 @@ int openFile(FILE **f, char *fileName, char *mode){
 		tmp = (char *)malloc(strlen(fileName) + strlen(crtDir) + 3);
 		sprintf(tmp, "%s/%s", crtDir, fileName);
 	}
-	printf("openning file '%s' with mode '%s'\n", tmp, mode);
+	//printf("openning file '%s' with mode '%s'\n", tmp, mode);
 	*f = fopen(tmp, mode);
 	if(!(*f)){
 		printf("Can't open file '%s' !\n", tmp);
